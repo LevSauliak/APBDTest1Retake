@@ -1,8 +1,10 @@
 using APBDTest1Retake.Repositories;
+using APBDTest1Retake.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddScoped<IDbRepository, DbRepository>();
+builder.Services.AddScoped<IClientsService, ClientsService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddControllers();
