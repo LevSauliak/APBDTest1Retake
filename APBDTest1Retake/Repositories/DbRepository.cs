@@ -67,6 +67,71 @@ public class DbRepository: IDbRepository
 
         return dto;
     }
-    
-    
+
+    public async Task<int?> GetCarPricePerDay(int carId)
+    {
+        string query = @"
+            SELECT PricePerDay from cars where ID = @carId;
+        ";
+        SqlConnection conn = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+        SqlCommand cmd = new SqlCommand(query, conn);
+        cmd.Parameters.AddWithValue("@carId", carId);
+        
+        await conn.OpenAsync();
+        var price = await cmd.ExecuteScalarAsync();
+        if (price == null || price == DBNull.Value)
+        {
+            return null;
+        }
+
+        return (int)price;
+    }
+
+    public async Task<int> AddClientWithCarRental(ClientWithRentalPostDto dto, int totalPrice)
+    {
+        string queryClient = @"
+            insert into clients(FirstName, LastName, Address) 
+            OUTPUT INSERTED.ID
+            values (@FirstName, @LastName, @Address);
+        ";
+        string queryCarRental = @"
+            insert into car_rentals(clientid, carid, datefrom, dateto, totalprice)
+            values (@ClientId, @CarId, @DateFrom, @DateTo, @TotalPrice);
+        ";
+        
+        await using var conn = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+        
+        await conn.OpenAsync();
+        await using var transaction = await conn.BeginTransactionAsync();
+
+        try
+        {
+            await using var cmd1 = new SqlCommand(queryClient, conn);
+            cmd1.Transaction = transaction as SqlTransaction;
+            cmd1.Parameters.AddWithValue("FirstName", dto.Client.FirstName);
+            cmd1.Parameters.AddWithValue("LastName", dto.Client.LastName);
+            cmd1.Parameters.AddWithValue("Address", dto.Client.Address);
+
+            var clientId = Convert.ToInt32(await cmd1.ExecuteScalarAsync());
+            Console.WriteLine(clientId);
+
+            await using var cmd2 = new SqlCommand(queryCarRental, conn);
+            cmd2.Transaction = transaction as SqlTransaction;
+            cmd2.Parameters.AddWithValue("CarId", dto.CarId);
+            cmd2.Parameters.AddWithValue("DateFrom", dto.DateFrom);
+            cmd2.Parameters.AddWithValue("DateTo", dto.DateTo);
+            cmd2.Parameters.AddWithValue("TotalPrice", totalPrice);
+            cmd2.Parameters.AddWithValue("ClientId", clientId);
+            await cmd2.ExecuteNonQueryAsync();
+
+            await transaction.CommitAsync();
+            return clientId;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+        
+    }
 }
